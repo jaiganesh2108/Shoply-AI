@@ -8,3 +8,5 @@ class Product(models.Model):
     stock = models.PositiveIntegerField(default=0)
     image = models.UrlField(blank=True)
     is_available = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
