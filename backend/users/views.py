@@ -11,4 +11,8 @@ class RegisterView(generics.CreateAPIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def profile(request):
-    
+    return Response({
+        "id":request.user.id,
+        "username": request.user.username,
+        
+    })
