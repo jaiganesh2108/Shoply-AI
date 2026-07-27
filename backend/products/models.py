@@ -8,6 +8,7 @@ class Product(models.Model):
     stock = models.PositiveIntegerField(default=0)
     image = models.URLField(blank=True)
     is_available = models.BooleanField(default=True)
+    category = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
