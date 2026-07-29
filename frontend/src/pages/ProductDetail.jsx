@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getProduct } from "../api/products";
+import { addToCart } from "../api/cart";
 
 function ProductDetail() {
     const { id } = useParams();
@@ -20,6 +21,18 @@ function ProductDetail() {
             console.error(error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAddToCart = async () => {
+        try {
+            await addToCart(product.id);
+
+            alert("Product added to cart!");
+        } catch (error) {
+            console.error(error.response?.data || error);
+
+            alert("Failed to add product.");
         }
     };
 
@@ -43,7 +56,7 @@ function ProductDetail() {
 
             <p>Stock: {product.stock}</p>
 
-            <button>Add to Cart</button>
+            <button onClick={handleAddToCart}>Add to Cart</button>
         </div>
     );
 }
