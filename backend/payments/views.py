@@ -16,7 +16,13 @@ class PaymentListCreateView(generics.ListCreateAPIView):
         return Payment.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        order = serializer.validated_data["order"]
+
+        serializer.save(
+            user=self.request.user,
+            amount=order.total_price,
+            payment_status="Success",
+        )
 
 
 class PaymentDetailView(generics.RetrieveAPIView):
