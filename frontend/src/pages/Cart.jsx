@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { getCart, deleteCartItem } from "../api/cart";
+import { createOrder } from "../api/orders";
+import { useNavigate } from "react-router-dom";
 
 function Cart() {
     const [cartItems, setCartItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
     useEffect(() => {
         fetchCart();
@@ -17,6 +20,21 @@ function Cart() {
             console.error(error.response?.data || error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCheckout = async () => {
+        try {
+            const order = await createOrder({
+                total_price: total,
+            });
+
+            alert("Order created successfully!");
+
+            navigate(`/payment/${order.id}`);
+        } catch (error) {
+            console.error(error.response?.data || error);
+            alert("Checkout failed.");
         }
     };
 
@@ -78,7 +96,7 @@ function Cart() {
 
             <h2>Total: ₹{total}</h2>
 
-            <button>Proceed to Checkout</button>
+            <button onClick={handleCheckout}>Proceed to Checkout</button>
         </div>
     );
 }
