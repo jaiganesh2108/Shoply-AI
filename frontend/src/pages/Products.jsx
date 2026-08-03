@@ -1,23 +1,24 @@
 import { useEffect, useState } from "react";
 import { getProducts } from "../api/products";
 import { Link } from "react-router-dom";
-import { ShoppingBag, ArrowRight, PackageX } from "lucide-react";
+import { ShoppingBag, ArrowRight, PackageX, Search, X } from "lucide-react";
 
 function Products() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState("");
 
     useEffect(() => {
         fetchProducts();
-    }, []);
+    }, [search]);
 
     const fetchProducts = async () => {
         try {
-            const data = await getProducts();
+            const data = await getProducts(search);
             setProducts(data);
         }
         catch (error) {
-            console.log(error);
+            console.error(error);
         }
         finally {
             setLoading(false);
@@ -74,8 +75,54 @@ function Products() {
                 .page-head p {
                     font-size: 15px;
                     color: var(--muted);
-                    margin: 0;
+                    margin: 0 0 24px;
                 }
+
+                .search-bar {
+                    position: relative;
+                    max-width: 380px;
+                }
+                .search-bar svg.search-icon {
+                    position: absolute;
+                    left: 14px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    color: var(--muted);
+                    pointer-events: none;
+                }
+                .search-bar input {
+                    width: 100%;
+                    padding: 11px 40px 11px 40px;
+                    border: 1px solid var(--line);
+                    border-radius: 10px;
+                    font-size: 14px;
+                    font-family: inherit;
+                    color: var(--ink);
+                    background: var(--surface);
+                    outline: none;
+                    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+                }
+                .search-bar input::placeholder { color: #a5abb5; }
+                .search-bar input:focus {
+                    border-color: var(--accent);
+                    box-shadow: 0 0 0 3px var(--accent-soft);
+                    background: var(--white);
+                }
+                .search-clear {
+                    position: absolute;
+                    right: 8px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: var(--muted);
+                    display: flex;
+                    align-items: center;
+                    padding: 6px;
+                    border-radius: 6px;
+                }
+                .search-clear:hover { color: var(--ink); background: var(--line); }
 
                 .grid {
                     display: grid;
@@ -239,6 +286,24 @@ function Products() {
                     </span>
                     <h1 className="display">Products</h1>
                     <p>Browse everything in stock, or let the agent narrow it down for you.</p>
+                    <div className="search-bar">
+                        <Search size={16} strokeWidth={2} className="search-icon" />
+                        <input
+                            type="text"
+                            placeholder="Search products..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                        {search && (
+                            <button
+                                className="search-clear"
+                                onClick={() => setSearch("")}
+                                aria-label="Clear search"
+                            >
+                                <X size={14} strokeWidth={2.2} />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {loading ? (
@@ -254,8 +319,12 @@ function Products() {
                 ) : products.length === 0 ? (
                     <div className="empty">
                         <PackageX size={40} strokeWidth={1.4} />
-                        <h3>No products yet</h3>
-                        <p>Check back soon, or try refreshing the page.</p>
+                        <h3>{search ? "No matches found" : "No products yet"}</h3>
+                        <p>
+                            {search
+                                ? `Nothing matched "${search}". Try a different search.`
+                                : "Check back soon, or try refreshing the page."}
+                        </p>
                     </div>
                 ) : (
                     <div className="grid">

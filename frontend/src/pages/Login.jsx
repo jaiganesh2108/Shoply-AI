@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom"; // 1. Import useNavigate
 import { loginUser } from "../api/auth";
 import { Eye, EyeOff, ShoppingBag, ArrowRight, AlertCircle } from "lucide-react";
 
 function Login() {
+    const navigate = useNavigate(); // 2. Initialize the hook
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +24,9 @@ function Login() {
 
             localStorage.setItem("access", data.access);
             localStorage.setItem("refresh", data.refresh);
+
+            // 3. Redirect to the home page (or dashboard)
+            navigate("/products", { replace: true });
         } catch (err) {
             setError("Invalid username or password. Please try again.");
         } finally {
