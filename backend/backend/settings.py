@@ -97,7 +97,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'shoply_db',
         "USER": "postgres",
-        "PASSWORD": "jai@123",   # Replace with your password
+        "PASSWORD": "****",   # Replace with your password
         "HOST": "localhost",
         "PORT": "5432",
     }
