@@ -3,9 +3,11 @@ import {
   Search, ShoppingBag, ArrowRight, Check, Zap, RefreshCw, Sparkles,
   ShieldCheck, Truck, Star, Wallet, Plus, MessageCircle,
 } from "lucide-react";
+import lottie from "lottie-web";
 import AssistantChat from "../components/AssistantChat/AssistantChat";
+import heroAnimation from "../assets/OnlineShopping.json"; // adjust path if needed
 
-const BRAND = "Norda";
+const BRAND = "Shoply AI";
 
 const AGENT_SCRIPT = [
   "Understanding your request",
@@ -16,6 +18,23 @@ const AGENT_SCRIPT = [
 
 const scrollTo = (id) =>
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+/* Plays a Lottie JSON animation using lottie-web */
+function HeroLottie({ data }) {
+  const box = useRef(null);
+  useEffect(() => {
+    if (!box.current) return;
+    const anim = lottie.loadAnimation({
+      container: box.current,
+      renderer: "svg",
+      loop: true,
+      autoplay: true,
+      animationData: data,
+    });
+    return () => anim.destroy();
+  }, [data]);
+  return <div ref={box} style={{ width: "100%", height: "100%" }} />;
+}
 
 /* Fades a block in once as it enters the screen */
 function Reveal({ children, className = "" }) {
@@ -139,7 +158,7 @@ function Home({ products = [] }) {
         .rv.in { opacity:1; transform:none; }
 
         /* HERO */
-        .hero { position:relative; text-align:center; padding:104px 0 20px; overflow:hidden; }
+        .hero { position:relative; text-align:left; padding:104px 0 20px; overflow:hidden; }
         .aurora { position:absolute; inset:0; pointer-events:none; }
         .aurora span { position:absolute; border-radius:50%; filter:blur(110px); opacity:.5; animation:drift 14s ease-in-out infinite alternate; }
         .aurora .a { width:480px; height:480px; background:var(--blue); left:6%; top:-80px; }
@@ -147,18 +166,23 @@ function Home({ products = [] }) {
         .aurora .c { width:340px; height:340px; background:var(--pink); left:40%; top:240px; opacity:.28; animation-delay:-9s; }
         @keyframes drift { to { transform:translate(50px,30px) scale(1.14); } }
         .hero .wrap { position:relative; }
+
+        .hero-grid { display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center; }
+        .hero-anim { width:100%; max-width:520px; height:420px; margin:0 auto; }
+        .hero-anim svg { width:100% !important; height:100% !important; display:block; }
+
         .badge { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:#d2d2d7; background:var(--card);
           border:1px solid var(--line); border-radius:980px; padding:7px 14px; margin-bottom:28px; }
         .badge svg { color:var(--blue); }
-        .hero h1 { font-size:clamp(44px,8.4vw,92px); line-height:1.02; letter-spacing:-.045em; font-weight:700; margin:0 auto 24px; max-width:920px; }
-        .sub { font-size:clamp(17px,2.2vw,22px); line-height:1.5; color:var(--muted); max-width:640px; margin:0 auto 36px; }
-        .ctas { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-bottom:22px; }
+        .hero h1 { font-size:clamp(40px,5.6vw,72px); line-height:1.04; letter-spacing:-.045em; font-weight:700; margin:0 0 24px; }
+        .sub { font-size:clamp(17px,2vw,20px); line-height:1.5; color:var(--muted); max-width:520px; margin:0 0 32px; }
+        .ctas { display:flex; gap:14px; justify-content:flex-start; flex-wrap:wrap; margin-bottom:22px; }
         .btn { border:0; border-radius:980px; padding:15px 28px; font-size:16px; font-weight:600; display:inline-flex; align-items:center; gap:8px; cursor:pointer; transition:transform .2s; }
         .btn:hover { transform:scale(1.04); }
         .btn.main { background:var(--blue); color:#fff; box-shadow:0 10px 40px rgba(41,151,255,.45); }
         .btn.ghost { background:rgba(255,255,255,.1); color:var(--text); border:1px solid var(--line); }
         .btn.light { background:#fff; color:#000; }
-        .chips { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:760px; margin:0 auto; }
+        .chips { display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-start; max-width:560px; margin:0; }
         .chip { display:inline-flex; align-items:center; gap:7px; background:var(--card); border:1px solid var(--line); color:#d2d2d7;
           border-radius:980px; padding:9px 15px; font-size:13.5px; cursor:pointer; transition:background .2s,border-color .2s; }
         .chip:hover { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.3); }
@@ -282,6 +306,12 @@ function Home({ products = [] }) {
 
         @media (max-width:860px) {
           .hero { padding-top:64px; }
+          .hero-grid { grid-template-columns:1fr; gap:32px; text-align:center; }
+          .hero-copy { order:1; }
+          .hero-anim { order:2; max-width:360px; height:320px; }
+          .sub { margin-left:auto; margin-right:auto; }
+          .ctas, .chips { justify-content:center; }
+          .chips { margin:0 auto; }
           .bento,.steps,.grid,.show,.stats { grid-template-columns:1fr; }
           .f1,.f2,.f3,.f4,.f5 { grid-column:auto; } .f5 { flex-direction:column; align-items:flex-start; gap:18px; }
           .f1 h3 { font-size:32px; } .show { gap:44px; }
@@ -298,18 +328,29 @@ function Home({ products = [] }) {
       <section className="hero">
         <div className="aurora"><span className="a" /><span className="b" /><span className="c" /></div>
         <div className="wrap">
-          <span className="badge"><Sparkles size={14} /> Meet the {BRAND} shopping agent</span>
-          <h1>Just say what you want.<br /><span className="grad">We’ll handle the rest.</span></h1>
-          <p className="sub">Describe an item, a budget and a size. The agent searches the catalog, picks the best match and places the order once you approve.</p>
-          <div className="ctas">
-            <button className="btn main" onClick={() => scrollTo("assistant")}>Ask the agent <ArrowRight size={18} strokeWidth={2.4} /></button>
-            <button className="btn ghost" onClick={() => scrollTo("how-it-works")}>See how it works</button>
+          <div className="hero-grid">
+            {/* LEFT: Lottie animation */}
+            <div className="hero-anim">
+              <HeroLottie data={heroAnimation} />
+            </div>
+
+            {/* RIGHT: intro text */}
+            <div className="hero-copy">
+              <span className="badge"><Sparkles size={14} /> Meet the {BRAND} shopping agent</span>
+              <h1>Just say what you want.<br /><span className="grad">We’ll handle the rest.</span></h1>
+              <p className="sub">Describe an item, a budget and a size. The agent searches the catalog, picks the best match and places the order once you approve.</p>
+              <div className="ctas">
+                <button className="btn main" onClick={() => scrollTo("assistant")}>Ask the agent <ArrowRight size={18} strokeWidth={2.4} /></button>
+                <button className="btn ghost" onClick={() => scrollTo("how-it-works")}>See how it works</button>
+              </div>
+              <div className="chips">
+                {CHIPS.map((c) => (
+                  <button className="chip" key={c} onClick={() => scrollTo("assistant")}><MessageCircle size={14} />{c}</button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="chips">
-            {CHIPS.map((c) => (
-              <button className="chip" key={c} onClick={() => scrollTo("assistant")}><MessageCircle size={14} />{c}</button>
-            ))}
-          </div>
+
           <div className="demo-wrap"><AgentDemo /></div>
         </div>
         <div className="marquee" aria-hidden="true">

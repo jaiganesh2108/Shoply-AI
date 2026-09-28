@@ -1,575 +1,405 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Sparkles, Send, ShoppingBag, RotateCcw, X, MessageCircle } from "lucide-react";
+import {
+  Bot, Send, ShoppingBag, RotateCcw, X, MessageCircle, ShieldCheck, Sparkles, RefreshCw,
+} from "lucide-react";
 import { sendMessage } from "../../api/ai";
 
+/*
+  Props
+  - variant        "inline" (default, sits inside the #assistant section) | "floating" (bottom-right bubble)
+  - brand          name shown in the header
+  - products       optional. Items with `pick: true` show as chips
+  - pendingPrompt  optional { text, id }. When `id` changes, the text is sent automatically
+                   (used by the hero chips on the home page)
+*/
+
 const QUICK_PROMPTS = [
-  "Show me something under a budget",
-  "Recommend a daily carry item",
-  "What should I buy for work?",
-  "Help me find a gift",
+  "Running shoes under ₹4,000",
+  "A gift for my mother",
+  "Backpack for college",
+  "Wireless earbuds, best reviews",
 ];
 
-const WELCOME_MESSAGE = {
-  role: "assistant",
-  text: "I’m your shop assistant. Ask for a product type, budget, or use case and I’ll help you find it.",
-};
+const STATUS_STEPS = [
+  "Understanding your request",
+  "Searching the catalog",
+  "Comparing price, reviews, delivery",
+];
 
-function AssistantChat({ products = [] }) {
-  const [isOpen, setIsOpen] = useState(false);
+const makeWelcome = (brand) => ({
+  role: "assistant",
+  text: `Hi, I'm the ${brand} shopping agent. Tell me what you need, plus your budget, size or delivery date, and I'll find the best match. I never order without your approval.`,
+});
+
+function AssistantChat({
+  products = [],
+  variant = "inline",
+  brand = "Norda",
+  pendingPrompt = null,
+}) {
+  const floating = variant === "floating";
+
+  const [isOpen, setIsOpen] = useState(false); // floating mode only
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
-  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState(() => [makeWelcome(brand)]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false); // true while waiting on the API
-  const messagesEndRef = useRef(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [statusIdx, setStatusIdx] = useState(0);
+
+  const logRef = useRef(null);
   const inputRef = useRef(null);
   const panelRef = useRef(null);
+  const sendRef = useRef(null);
+  const lastPromptId = useRef(null);
 
+  /* Scroll only the message list, never the page */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = logRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, isTyping]);
 
+  /* Cycle the agent status text while waiting for the API */
   useEffect(() => {
-    if (isOpen) {
-      setHasOpenedOnce(true);
-      // let the panel mount/animate in before focusing
-      const t = setTimeout(() => inputRef.current?.focus(), 220);
-      return () => clearTimeout(t);
-    }
-  }, [isOpen]);
+    if (!isTyping) return;
+    setStatusIdx(0);
+    const t = setInterval(() => setStatusIdx((i) => Math.min(i + 1, STATUS_STEPS.length - 1)), 1500);
+    return () => clearInterval(t);
+  }, [isTyping]);
 
-  // Close on Escape, and on outside click
+  /* Floating mode: focus, Escape and outside click */
   useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setIsOpen(false);
-    };
-    const onClick = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) {
-        // ignore clicks on the toggle button itself; it has its own handler
-        if (!e.target.closest(".assistant-fab")) setIsOpen(false);
-      }
+    if (!floating || !isOpen) return;
+    setHasOpenedOnce(true);
+    const focusTimer = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 220);
+    const onKeyDown = (e) => { if (e.key === "Escape") setIsOpen(false); };
+    const onDown = (e) => {
+      if (panelRef.current?.contains(e.target)) return;
+      if (e.target.closest?.(".ac-fab")) return;
+      setIsOpen(false);
     };
     document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("mousedown", onClick);
+    document.addEventListener("mousedown", onDown);
     return () => {
+      clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("mousedown", onDown);
     };
-  }, [isOpen]);
+  }, [floating, isOpen]);
 
-  // Real API-backed send, wired into the same UI flow as before.
-  const handleSend = async (value) => {
-    const trimmed = value.trim();
-    if (!trimmed || isTyping) {
-      return;
-    }
+  /* history sent to the API: everything except the welcome text and error notes */
+  const buildHistory = (list) =>
+    list.slice(1).filter((m) => !m.error).map((m) => ({ role: m.role, content: m.text }));
 
-    setMessages((current) => [...current, { role: "user", text: trimmed }]);
+  const handleSend = async (value, { retry = false } = {}) => {
+    const trimmed = (value || "").trim();
+    if (!trimmed || isTyping) return;
+
+    const base = retry ? messages.filter((m) => !m.error) : messages;
+    const next = retry ? base : [...base, { role: "user", text: trimmed }];
+    setMessages(next);
     setInput("");
     setIsTyping(true);
 
     try {
-      const data = await sendMessage(trimmed);
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", text: data.reply },
+      // The second argument is ignored by the API helper if it doesn't use it
+      const data = await sendMessage(trimmed, buildHistory(next));
+      const reply = (data && data.reply ? String(data.reply) : "").trim();
+      setMessages((cur) => [
+        ...cur.filter((m) => !m.error),
+        { role: "assistant", text: reply || "I couldn't find an answer for that. Try rephrasing your request." },
       ]);
     } catch (error) {
       console.error(error);
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", text: "Sorry, something went wrong." },
+      setMessages((cur) => [
+        ...cur.filter((m) => !m.error),
+        {
+          role: "assistant",
+          error: true,
+          retryText: trimmed,
+          text: "I couldn't reach the shop right now. Check your connection and try again.",
+        },
       ]);
     } finally {
       setIsTyping(false);
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
     }
   };
+  sendRef.current = handleSend;
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+  /* Prompts pushed in from the page (hero chips) */
+  useEffect(() => {
+    if (!pendingPrompt || pendingPrompt.id === lastPromptId.current) return;
+    lastPromptId.current = pendingPrompt.id;
+    if (floating) setIsOpen(true);
+    sendRef.current(pendingPrompt.text);
+  }, [pendingPrompt, floating]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
     handleSend(input);
   };
 
-  const handleReset = (event) => {
-    event.stopPropagation();
+  const handleReset = () => {
     if (isTyping) return;
-    setMessages([WELCOME_MESSAGE]);
+    setMessages([makeWelcome(brand)]);
     setInput("");
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
   };
 
   const canSend = input.trim().length > 0 && !isTyping;
-  const picks = products.filter((product) => product.pick).slice(0, 3);
-  const showQuickPrompts = messages.length < 3;
+  const picks = products.filter((p) => p.pick).slice(0, 3);
+  const showQuickPrompts = messages.length === 1;
+
+  const panel = (
+    <div
+      className="ac-panel"
+      ref={panelRef}
+      role={floating ? "dialog" : "region"}
+      aria-label={`${brand} shopping agent`}
+    >
+      <div className="ac-top">
+        <div className="ac-title">
+          <span className="ac-logo" aria-hidden="true"><Sparkles size={16} /></span>
+          <div>
+            <strong>{brand} Agent</strong>
+            <span><i className="ac-live" />Online · You approve every order</span>
+          </div>
+        </div>
+        <div className="ac-actions">
+          <button
+            className="ac-icon-btn"
+            type="button"
+            onClick={handleReset}
+            disabled={isTyping || messages.length < 2}
+            aria-label="Start a new request"
+            title="Start a new request"
+          >
+            <RotateCcw size={14} strokeWidth={2.2} />
+          </button>
+          {floating && (
+            <button className="ac-icon-btn" type="button" onClick={() => setIsOpen(false)} aria-label="Close chat" title="Close chat">
+              <X size={15} strokeWidth={2.2} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="ac-log" ref={logRef} role="log" aria-live="polite" aria-label="Conversation with the shopping agent">
+        {messages.map((m, i) => (
+          <div className={`ac-row ${m.role}`} key={i}>
+            {m.role === "assistant" && (
+              <span className="ac-avatar" aria-hidden="true"><Bot size={12} strokeWidth={2.2} /></span>
+            )}
+            <div className={`ac-msg ${m.role}${m.error ? " err" : ""}`}>
+              {m.text}
+              {m.error && (
+                <button
+                  type="button"
+                  className="ac-retry"
+                  onClick={() => handleSend(m.retryText, { retry: true })}
+                  disabled={isTyping}
+                >
+                  <RefreshCw size={12} strokeWidth={2.4} /> Try again
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {isTyping && (
+          <div className="ac-row assistant">
+            <span className="ac-avatar" aria-hidden="true"><Bot size={12} strokeWidth={2.2} /></span>
+            <div className="ac-msg assistant ac-status" aria-label="The agent is working">
+              <span className="ac-dots" aria-hidden="true"><span /><span /><span /></span>
+              {STATUS_STEPS[statusIdx]}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {picks.length > 0 && (
+        <div className="ac-picks">
+          {picks.map((p) => (
+            <div className="ac-pick" key={p.name}>
+              <span className="ac-pick-ico"><ShoppingBag size={10} strokeWidth={2} /></span>
+              <strong>{p.name}</strong>
+              {p.price && <span className="ac-pick-price">{p.price}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showQuickPrompts && (
+        <div className="ac-prompts">
+          {QUICK_PROMPTS.map((q) => (
+            <button className="ac-prompt" key={q} type="button" onClick={() => handleSend(q)} disabled={isTyping}>
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <form className="ac-form" onSubmit={handleSubmit}>
+        <input
+          ref={inputRef}
+          className="ac-input"
+          type="text"
+          value={input}
+          maxLength={500}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Try: running shoes, size 9, under ₹4,000"
+          aria-label="Describe what you want to buy"
+          autoComplete="off"
+        />
+        <button className="ac-send" type="submit" aria-label="Send message" disabled={!canSend}>
+          <Send size={16} strokeWidth={2.2} />
+        </button>
+      </form>
+      <p className="ac-note"><ShieldCheck size={13} /> Nothing is ordered until you approve it. The agent can make mistakes.</p>
+    </div>
+  );
 
   return (
     <>
       <style>{`
-        .assistant-widget-root {
-          position: fixed;
-          right: 22px;
-          bottom: 22px;
-          z-index: 1000;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 14px;
+        .ac-root {
+          --ac-line: rgba(255,255,255,.12);
+          --ac-text: #f5f5f7;
+          --ac-muted: #a1a1a6;
+          --ac-blue: #2997ff;
+          --ac-violet: #8e5cf7;
+          --ac-pink: #ff5c8a;
+          --ac-green: #30d158;
+          --ac-grad: linear-gradient(90deg,#2997ff,#8e5cf7 55%,#ff5c8a);
+          color: var(--ac-text);
+          font-family: -apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Segoe UI",sans-serif;
+          -webkit-font-smoothing: antialiased;
         }
+        .ac-root * { box-sizing: border-box; }
+        .ac-root button { font-family: inherit; }
+        .ac-root button:focus-visible,
+        .ac-root input:focus-visible { outline: 2px solid var(--ac-blue); outline-offset: 2px; }
 
-        /* Floating toggle button */
-        .assistant-fab {
-          width: 58px;
-          height: 58px;
-          border-radius: 50%;
-          border: none;
-          background: var(--ink);
-          color: var(--paper);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          box-shadow: 0 14px 30px -10px rgba(34, 29, 23, 0.45);
-          transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-          flex-shrink: 0;
-          position: relative;
+        /* Inline: lives in the page, glowing like the hero demo */
+        .ac-inline { position: relative; }
+        .ac-inline::before {
+          content: ""; position: absolute; inset: -2px; border-radius: 30px;
+          background: var(--ac-grad); opacity: .35; filter: blur(36px); pointer-events: none;
         }
-        .assistant-fab:hover { background: var(--rust); transform: translateY(-2px); }
-        .assistant-fab:active { transform: translateY(0); }
-        .assistant-fab .fab-icon-swap {
-          position: relative;
-          width: 22px;
-          height: 22px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .assistant-fab .fab-icon-swap svg {
-          position: absolute;
-          transition: opacity 0.15s ease, transform 0.15s ease;
-        }
-        .assistant-fab .fab-icon-swap svg.hide {
-          opacity: 0;
-          transform: scale(0.6) rotate(-20deg);
-        }
-        .assistant-fab .fab-icon-swap svg.show {
-          opacity: 1;
-          transform: scale(1) rotate(0deg);
-        }
-        .fab-ping {
-          position: absolute;
-          top: -3px;
-          right: -3px;
-          width: 13px;
-          height: 13px;
-          border-radius: 50%;
-          background: var(--rust);
-          border: 2px solid var(--paper);
-        }
-        .fab-ping::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: 50%;
-          background: var(--rust);
-          animation: fab-pulse 1.8s ease-out infinite;
-        }
-        @keyframes fab-pulse {
-          0% { transform: scale(1); opacity: 0.7; }
-          100% { transform: scale(2.4); opacity: 0; }
-        }
+        .ac-inline .ac-panel { position: relative; height: min(640px, 82vh); min-height: 460px; border-radius: 28px; }
 
-        /* Chat panel */
-        .assistant-panel {
-          width: min(380px, calc(100vw - 44px));
-          height: min(560px, calc(100vh - 120px));
-          background: linear-gradient(180deg, #fffefb 0%, #f6f0e5 100%);
-          border: 1px solid var(--line);
-          border-radius: 18px;
-          box-shadow: 0 30px 70px -30px rgba(34, 29, 23, 0.4);
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          transform-origin: bottom right;
-          animation: panel-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+        /* Floating: bottom-right bubble */
+        .ac-floating { position: fixed; right: 22px; bottom: 22px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
+        .ac-floating .ac-panel {
+          width: min(390px, calc(100vw - 44px)); height: min(580px, calc(100vh - 120px)); border-radius: 22px;
+          transform-origin: bottom right; animation: ac-in .22s cubic-bezier(.2,.8,.3,1) both;
         }
-        @keyframes panel-in {
-          from { opacity: 0; transform: scale(0.94) translateY(10px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
-        }
+        @keyframes ac-in { from { opacity: 0; transform: scale(.94) translateY(10px); } to { opacity: 1; transform: none; } }
 
-        .panel-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          padding: 14px 14px 14px 16px;
-          border-bottom: 1px solid var(--line);
-          background: linear-gradient(180deg, #ffffff 0%, #faf8f2 100%);
-          flex-shrink: 0;
+        .ac-fab {
+          position: relative; width: 58px; height: 58px; border-radius: 50%; border: 0; cursor: pointer;
+          background: var(--ac-grad); color: #fff; display: grid; place-items: center;
+          box-shadow: 0 14px 34px -8px rgba(41,151,255,.55); transition: transform .18s ease;
         }
-        .panel-title {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          min-width: 0;
-        }
-        .panel-title .dot {
-          width: 9px;
-          height: 9px;
-          border-radius: 50%;
-          background: var(--ledger);
-          box-shadow: 0 0 0 4px rgba(91, 111, 82, 0.12);
-          flex-shrink: 0;
-        }
-        .panel-title-text strong {
-          display: block;
-          font-size: 13.5px;
-          font-weight: 700;
-          color: var(--ink);
-          line-height: 1.2;
-        }
-        .panel-title-text span {
-          display: block;
-          font-family: "JetBrains Mono", monospace;
-          font-size: 10.5px;
-          color: var(--muted);
-          margin-top: 1px;
-        }
-        .panel-top-actions {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex-shrink: 0;
-        }
-        .panel-icon-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 30px;
-          height: 30px;
-          border: 1px solid var(--line);
-          background: var(--white);
-          color: var(--muted);
-          border-radius: 9px;
-          cursor: pointer;
-          transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-        }
-        .panel-icon-btn:hover:not(:disabled) {
-          border-color: var(--rust);
-          color: var(--rust);
-          background: var(--paper);
-        }
-        .panel-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ac-fab:hover { transform: translateY(-2px) scale(1.04); }
+        .ac-fab .swap { position: relative; width: 22px; height: 22px; display: grid; place-items: center; }
+        .ac-fab .swap svg { position: absolute; transition: opacity .15s ease, transform .15s ease; }
+        .ac-fab .swap svg.hide { opacity: 0; transform: scale(.6) rotate(-20deg); }
+        .ac-fab .ping { position: absolute; top: -2px; right: -2px; width: 13px; height: 13px; border-radius: 50%; background: var(--ac-green); border: 2px solid #000; }
+        .ac-fab .ping::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--ac-green); animation: ac-pulse 1.8s ease-out infinite; }
+        @keyframes ac-pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.4); opacity: 0; } }
 
-        .panel-log-wrap {
-          position: relative;
-          flex: 1;
-          min-height: 0;
+        /* Panel */
+        .ac-panel {
+          display: flex; flex-direction: column; overflow: hidden;
+          background: rgba(14,14,20,.94); border: 1px solid var(--ac-line);
+          backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+          box-shadow: 0 40px 90px rgba(0,0,0,.55);
         }
-        .panel-log-fade {
-          position: absolute;
-          top: 0; left: 0; right: 0;
-          height: 16px;
-          background: linear-gradient(180deg, #fffefb 0%, rgba(255,254,251,0) 100%);
-          pointer-events: none;
-          z-index: 1;
-        }
-        .panel-log {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          padding: 16px 14px;
-          overflow-y: auto;
-        }
-        .message-row {
-          display: flex;
-          align-items: flex-end;
-          gap: 7px;
-          animation: message-in 0.24s ease both;
-        }
-        .message-row.user { justify-content: flex-end; }
-        .message-row.assistant { justify-content: flex-start; }
-        @keyframes message-in {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .avatar {
-          width: 22px;
-          height: 22px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          background: var(--ink);
-          color: var(--paper);
-        }
-        .message {
-          max-width: 82%;
-          padding: 10px 13px;
-          border-radius: 14px;
-          font-size: 13.5px;
-          line-height: 1.55;
-        }
-        .message.user {
-          background: var(--ink);
-          color: var(--paper);
-          border-top-right-radius: 5px;
-        }
-        .message.assistant {
-          background: var(--white);
-          color: var(--ink);
-          border: 1px solid var(--line);
-          border-top-left-radius: 5px;
-        }
-        .typing-bubble { display: flex; align-items: center; padding: 12px 14px; }
-        .typing-dots { display: inline-flex; gap: 4px; }
-        .typing-dots span {
-          width: 5px; height: 5px; border-radius: 50%;
-          background: var(--muted);
-          animation: pulse 1s ease-in-out infinite;
-        }
-        .typing-dots span:nth-child(2) { animation-delay: 0.14s; }
-        .typing-dots span:nth-child(3) { animation-delay: 0.28s; }
-        @keyframes pulse {
-          0%, 100% { transform: translateY(0); opacity: 0.4; }
-          50% { transform: translateY(-3px); opacity: 1; }
-        }
+        .ac-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--ac-line); flex-shrink: 0; }
+        .ac-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .ac-logo { width: 36px; height: 36px; border-radius: 12px; background: var(--ac-grad); display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+        .ac-title strong { display: block; font-size: 15px; font-weight: 650; letter-spacing: -.01em; line-height: 1.2; }
+        .ac-title span { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ac-muted); margin-top: 2px; }
+        .ac-live { width: 7px; height: 7px; border-radius: 50%; background: var(--ac-green); box-shadow: 0 0 0 3px rgba(48,209,88,.18); flex-shrink: 0; }
+        .ac-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .ac-icon-btn { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--ac-line); background: rgba(255,255,255,.06); color: var(--ac-muted); display: grid; place-items: center; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+        .ac-icon-btn:hover:not(:disabled) { color: #fff; border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.12); }
+        .ac-icon-btn:disabled { opacity: .35; cursor: not-allowed; }
 
-        .panel-picks {
-          display: flex;
-          gap: 8px;
-          overflow-x: auto;
-          padding: 0 14px 10px;
-          flex-shrink: 0;
-        }
-        .panel-pick-chip {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          border: 1px solid var(--line);
-          background: var(--white);
-          border-radius: 999px;
-          padding: 6px 10px 6px 8px;
-          font-size: 11.5px;
-          white-space: nowrap;
-          flex-shrink: 0;
-        }
-        .panel-pick-chip .pick-icon-mini {
-          width: 18px; height: 18px;
-          border-radius: 50%;
-          background: var(--paper-dim);
-          display: flex; align-items: center; justify-content: center;
-          color: var(--ink);
-          flex-shrink: 0;
-        }
-        .panel-pick-chip strong { font-weight: 600; }
-        .panel-pick-chip .chip-price { color: var(--muted); font-family: "JetBrains Mono", monospace; }
+        /* Messages */
+        .ac-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 16px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
+        .ac-row { display: flex; align-items: flex-end; gap: 8px; animation: ac-msg .24s ease both; }
+        .ac-row.user { justify-content: flex-end; }
+        @keyframes ac-msg { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .ac-avatar { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,.1); color: var(--ac-blue); display: grid; place-items: center; flex-shrink: 0; }
+        .ac-msg { max-width: 82%; padding: 11px 15px; border-radius: 18px; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .ac-msg.user { background: linear-gradient(135deg,#2997ff,#8e5cf7); color: #fff; border-bottom-right-radius: 5px; }
+        .ac-msg.assistant { background: rgba(255,255,255,.08); border: 1px solid var(--ac-line); border-bottom-left-radius: 5px; }
+        .ac-msg.err { border-color: rgba(255,92,138,.5); }
+        .ac-retry { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 6px 12px; border-radius: 980px; border: 1px solid var(--ac-line); background: rgba(255,255,255,.1); color: var(--ac-text); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+        .ac-retry:hover:not(:disabled) { background: rgba(255,255,255,.18); }
+        .ac-retry:disabled { opacity: .5; cursor: not-allowed; }
+        .ac-status { display: flex; align-items: center; gap: 10px; color: #d2d2d7; }
+        .ac-dots { display: inline-flex; gap: 4px; }
+        .ac-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--ac-blue); animation: ac-bounce 1s ease-in-out infinite; }
+        .ac-dots span:nth-child(2) { animation-delay: .14s; }
+        .ac-dots span:nth-child(3) { animation-delay: .28s; }
+        @keyframes ac-bounce { 0%,100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-3px); opacity: 1; } }
 
-        .panel-prompts {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 7px;
-          padding: 0 14px 12px;
-          flex-shrink: 0;
-        }
-        .panel-prompt-chip {
-          border: 1px solid var(--line);
-          background: var(--white);
-          color: var(--ink);
-          border-radius: 999px;
-          padding: 7px 11px;
-          font-size: 11.5px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: border-color 0.15s ease, background 0.15s ease;
-        }
-        .panel-prompt-chip:hover:not(:disabled) {
-          border-color: var(--rust);
-          background: var(--paper);
-        }
-        .panel-prompt-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+        /* Picks and quick prompts */
+        .ac-picks { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 10px; flex-shrink: 0; }
+        .ac-pick { display: flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; border: 1px solid var(--ac-line); background: rgba(255,255,255,.06); border-radius: 980px; padding: 6px 12px 6px 8px; font-size: 12.5px; }
+        .ac-pick-ico { width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,.1); display: grid; place-items: center; }
+        .ac-pick-price { color: var(--ac-muted); }
+        .ac-prompts { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 14px; flex-shrink: 0; }
+        .ac-prompt { border: 1px solid var(--ac-line); background: rgba(255,255,255,.06); color: #d2d2d7; border-radius: 980px; padding: 8px 14px; font-size: 13px; cursor: pointer; transition: background .2s, border-color .2s; }
+        .ac-prompt:hover:not(:disabled) { background: rgba(255,255,255,.13); border-color: rgba(255,255,255,.3); }
+        .ac-prompt:disabled { opacity: .5; cursor: not-allowed; }
 
-        .panel-form {
-          display: flex;
-          gap: 8px;
-          padding: 12px;
-          border-top: 1px solid var(--line);
-          background: #fcfbf7;
-          flex-shrink: 0;
-        }
-        .panel-input {
-          flex: 1;
-          min-width: 0;
-          border: 1px solid var(--line);
-          border-radius: 11px;
-          padding: 11px 12px;
-          font: inherit;
-          font-size: 13.5px;
-          color: var(--ink);
-          background: var(--white);
-          outline: none;
-          transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .panel-input::placeholder { color: #a39b8d; }
-        .panel-input:focus {
-          border-color: var(--rust);
-          box-shadow: 0 0 0 3px rgba(193, 67, 42, 0.12);
-        }
-        .panel-send {
-          border: none;
-          border-radius: 11px;
-          padding: 0 14px;
-          min-width: 46px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--ink);
-          color: var(--paper);
-          cursor: pointer;
-          transition: background 0.15s ease, opacity 0.15s ease;
-        }
-        .panel-send:hover:not(:disabled) { background: var(--rust); }
-        .panel-send:disabled { opacity: 0.35; cursor: not-allowed; }
+        /* Input */
+        .ac-form { display: flex; gap: 10px; padding: 12px 16px 8px; border-top: 1px solid var(--ac-line); flex-shrink: 0; }
+        .ac-input { flex: 1; min-width: 0; border: 1px solid var(--ac-line); border-radius: 980px; padding: 13px 18px; font: inherit; font-size: 15px; color: var(--ac-text); background: rgba(255,255,255,.07); transition: border-color .15s, box-shadow .15s; }
+        .ac-input::placeholder { color: #6e6e73; }
+        .ac-input:focus { outline: none; border-color: var(--ac-blue); box-shadow: 0 0 0 3px rgba(41,151,255,.22); }
+        .ac-send { width: 48px; height: 48px; flex-shrink: 0; border: 0; border-radius: 50%; cursor: pointer; background: var(--ac-blue); color: #fff; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(41,151,255,.4); transition: transform .15s, opacity .15s; }
+        .ac-send:hover:not(:disabled) { transform: scale(1.06); }
+        .ac-send:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+        .ac-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 4px 16px 14px; font-size: 12px; color: var(--ac-muted); flex-shrink: 0; }
+        .ac-note svg { color: var(--ac-green); flex-shrink: 0; }
 
-        @media (max-width: 480px) {
-          .assistant-widget-root { right: 14px; bottom: 14px; }
-          .assistant-panel { width: calc(100vw - 28px); height: calc(100vh - 100px); border-radius: 16px; }
+        @media (max-width: 560px) {
+          .ac-inline .ac-panel { border-radius: 22px; height: min(600px, 80vh); }
+          .ac-msg { max-width: 88%; font-size: 14px; }
+          .ac-floating { right: 14px; bottom: 14px; }
+          .ac-floating .ac-panel { width: calc(100vw - 28px); height: calc(100vh - 100px); }
         }
         @media (prefers-reduced-motion: reduce) {
-          .assistant-panel, .message-row, .fab-ping::after, .assistant-fab {
-            animation: none;
-            transition: none;
-          }
+          .ac-row, .ac-floating .ac-panel, .ac-fab .ping::after, .ac-dots span { animation: none; }
+          .ac-fab, .ac-send, .ac-prompt { transition: none; }
         }
       `}</style>
 
-      <div className="assistant-widget-root">
-        {isOpen && (
-          <div className="assistant-panel" ref={panelRef} role="dialog" aria-label="Shop assistant chat">
-            <div className="panel-top">
-              <div className="panel-title">
-                <span className="dot" />
-                <div className="panel-title-text">
-                  <strong>Shoply Assistant</strong>
-                  <span>Live AI conversation</span>
-                </div>
-              </div>
-              <div className="panel-top-actions">
-                <button
-                  className="panel-icon-btn"
-                  type="button"
-                  onClick={handleReset}
-                  disabled={isTyping || messages.length < 2}
-                  aria-label="Reset conversation"
-                  title="Reset conversation"
-                >
-                  <RotateCcw size={14} strokeWidth={2.2} />
-                </button>
-                <button
-                  className="panel-icon-btn"
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  aria-label="Close chat"
-                  title="Close chat"
-                >
-                  <X size={15} strokeWidth={2.2} />
-                </button>
-              </div>
-            </div>
-
-            <div className="panel-log-wrap">
-              <div className="panel-log-fade" aria-hidden="true" />
-              <div className="panel-log" role="log" aria-live="polite" aria-label="Conversation with the shop assistant">
-                {messages.map((message, index) => (
-                  <div className={`message-row ${message.role}`} key={`${message.role}-${index}`}>
-                    {message.role === "assistant" && (
-                      <span className="avatar" aria-hidden="true">
-                        <Bot size={11} strokeWidth={2.2} />
-                      </span>
-                    )}
-                    <div className={`message ${message.role}`}>{message.text}</div>
-                  </div>
-                ))}
-                {isTyping && (
-                  <div className="message-row assistant">
-                    <span className="avatar" aria-hidden="true">
-                      <Bot size={11} strokeWidth={2.2} />
-                    </span>
-                    <div className="message assistant typing-bubble" aria-label="Assistant is typing">
-                      <span className="typing-dots" aria-hidden="true">
-                        <span /><span /><span />
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {picks.length > 0 && (
-              <div className="panel-picks">
-                {picks.map((product) => (
-                  <div className="panel-pick-chip" key={product.name}>
-                    <span className="pick-icon-mini">
-                      <ShoppingBag size={10} strokeWidth={2} />
-                    </span>
-                    <strong>{product.name}</strong>
-                    <span className="chip-price">{product.price}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {showQuickPrompts && (
-              <div className="panel-prompts">
-                {QUICK_PROMPTS.map((prompt) => (
-                  <button
-                    className="panel-prompt-chip"
-                    key={prompt}
-                    type="button"
-                    onClick={() => handleSend(prompt)}
-                    disabled={isTyping}
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <form className="panel-form" onSubmit={handleSubmit}>
-              <input
-                ref={inputRef}
-                className="panel-input"
-                type="text"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder='Try: "show me a tote for work"'
-                aria-label="Message the shop assistant"
-              />
-              <button className="panel-send" type="submit" aria-label="Send message" disabled={!canSend}>
-                <Send size={15} strokeWidth={2.2} />
-              </button>
-            </form>
-          </div>
-        )}
-
-        <button
-          className="assistant-fab"
-          type="button"
-          onClick={() => setIsOpen((open) => !open)}
-          aria-label={isOpen ? "Close chat assistant" : "Open chat assistant"}
-          aria-expanded={isOpen}
-        >
-          {!hasOpenedOnce && <span className="fab-ping" aria-hidden="true" />}
-          <span className="fab-icon-swap" aria-hidden="true">
-            <MessageCircle size={22} strokeWidth={2} className={isOpen ? "hide" : "show"} />
-            <X size={22} strokeWidth={2} className={isOpen ? "show" : "hide"} />
-          </span>
-        </button>
-      </div>
+      {floating ? (
+        <div className="ac-root ac-floating">
+          {isOpen && panel}
+          <button
+            className="ac-fab"
+            type="button"
+            onClick={() => setIsOpen((o) => !o)}
+            aria-label={isOpen ? "Close chat assistant" : "Open chat assistant"}
+            aria-expanded={isOpen}
+          >
+            {!hasOpenedOnce && <span className="ping" aria-hidden="true" />}
+            <span className="swap" aria-hidden="true">
+              <MessageCircle size={22} strokeWidth={2} className={isOpen ? "hide" : ""} />
+              <X size={22} strokeWidth={2} className={isOpen ? "" : "hide"} />
+            </span>
+          </button>
+        </div>
+      ) : (
+        <div className="ac-root ac-inline">{panel}</div>
+      )}
     </>
   );
 }
