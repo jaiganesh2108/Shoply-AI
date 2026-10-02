@@ -1,45 +1,12 @@
+
 import axios from "axios";
 import { redirectToLogin } from "./authUtils";
 
+// Remove trailing slashes from the API URL automatically
+const API_ROOT = (
+    import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
+
 const api = axios.create({
-    baseURL: `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/`,
+    baseURL: `${API_ROOT}/api/`,
 });
-
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem("access");
-
-    const publicRoutes = [
-        "register/",
-        "login/",
-        "refresh/"
-    ];
-
-    const isPublicRoute = publicRoutes.some(route =>
-        config.url.includes(route)
-    );
-
-    if (token && !isPublicRoute) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return config;
-});
-
-api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        const status = error.response?.status;
-        const requestUrl = error.config?.url || "";
-        const isAuthEndpoint = ["login/", "register/", "refresh/"].some((route) =>
-            requestUrl.includes(route)
-        );
-
-        if ((status === 401 || status === 403) && !isAuthEndpoint) {
-            redirectToLogin();
-        }
-
-        return Promise.reject(error);
-    }
-);
-
-export default api;
