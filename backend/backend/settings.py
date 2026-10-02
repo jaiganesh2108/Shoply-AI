@@ -58,6 +58,10 @@ INSTALLED_APPS = [
     'payments',
     'django_filters',
     'ai',
+    INSTALLED_APPS = [
+    # Keep your existing apps
+    "corsheaders",
+]
 ]
 
 MIDDLEWARE = [
@@ -74,7 +78,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "https://your-shoply.vercel.app",
+    "https://shoply-assendg8j-jai-ganesh-hs-projects.vercel.app",
 ]
 
 ROOT_URLCONF = 'backend.urls'
