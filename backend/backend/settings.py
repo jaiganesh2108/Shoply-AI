@@ -58,10 +58,9 @@ INSTALLED_APPS = [
     'payments',
     'django_filters',
     'ai',
-    INSTALLED_APPS = [
     # Keep your existing apps
     "corsheaders",
-]
+
 ]
 
 MIDDLEWARE = [
