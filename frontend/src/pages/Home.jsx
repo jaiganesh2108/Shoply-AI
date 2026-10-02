@@ -5,9 +5,14 @@ import {
 } from "lucide-react";
 import lottie from "lottie-web";
 import AssistantChat from "../components/AssistantChat/AssistantChat";
+import CrowdCanvas from "../components/ui/crowd-canvas";
 import heroAnimation from "../assets/OnlineShopping.json"; // adjust path if needed
 
 const BRAND = "Shoply AI";
+
+// Sprite sheet for the walking crowd (you can download it into /assets and import it instead)
+const CROWD_SRC =
+  "https://cdn.21st.dev/assets/localized/abdb8990a7bef8c2f5af3e45f0a3c969c4b0603fba8be92e81347de4ea4e1ed7.png";
 
 const AGENT_SCRIPT = [
   "Understanding your request",
@@ -165,7 +170,21 @@ function Home({ products = [] }) {
         .aurora .b { width:440px; height:440px; background:var(--violet); right:8%; top:20px; animation-delay:-5s; }
         .aurora .c { width:340px; height:340px; background:var(--pink); left:40%; top:240px; opacity:.28; animation-delay:-9s; }
         @keyframes drift { to { transform:translate(50px,30px) scale(1.14); } }
-        .hero .wrap { position:relative; }
+        .hero .wrap { position:relative; z-index:1; } /* content sits above the crowd */
+
+        /* HERO CROWD: glowing figures that slowly shift blue -> violet -> pink */
+        .hero-crowd { position:absolute; left:0; right:0; bottom:0; height:clamp(340px,52vh,560px);
+          z-index:0; pointer-events:none;
+          opacity:.9;
+          filter:invert(1) sepia(1) saturate(9) hue-rotate(190deg) brightness(1.5)
+                 drop-shadow(0 0 10px rgba(142,92,247,.55));
+          animation:crowdHue 12s ease-in-out infinite alternate;
+          mask-image:linear-gradient(180deg,transparent,#000 35%);
+          -webkit-mask-image:linear-gradient(180deg,transparent,#000 35%); }
+        @keyframes crowdHue {
+          from { filter:invert(1) sepia(1) saturate(9) hue-rotate(190deg) brightness(1.5) drop-shadow(0 0 10px rgba(41,151,255,.55)); }
+          to   { filter:invert(1) sepia(1) saturate(9) hue-rotate(290deg) brightness(1.5) drop-shadow(0 0 10px rgba(255,92,138,.55)); }
+        }
 
         .hero-grid { display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center; }
         .hero-anim { width:100%; max-width:520px; height:420px; margin:0 auto; }
@@ -177,7 +196,7 @@ function Home({ products = [] }) {
         .hero h1 { font-size:clamp(40px,5.6vw,72px); line-height:1.04; letter-spacing:-.045em; font-weight:700; margin:0 0 24px; }
         .sub { font-size:clamp(17px,2vw,20px); line-height:1.5; color:var(--muted); max-width:520px; margin:0 0 32px; }
         .ctas { display:flex; gap:14px; justify-content:flex-start; flex-wrap:wrap; margin-bottom:22px; }
-        .btn { border:0; border-radius:980px; padding:15px 28px; font-size:16px; font-weight:600; display:inline-flex; align-items:center; gap:8px; cursor:pointer; transition:transform .2s; }
+        .btn { border:0; border-radius:980px; padding:15px 28px; font-size:16px; font-weight:600; display:inline-flex; align-items:center; gap:8px; cursor:pointer; transition:transform .5s ease; }
         .btn:hover { transform:scale(1.04); }
         .btn.main { background:var(--blue); color:#fff; box-shadow:0 10px 40px rgba(41,151,255,.45); }
         .btn.ghost { background:rgba(255,255,255,.1); color:var(--text); border:1px solid var(--line); }
@@ -201,18 +220,25 @@ function Home({ products = [] }) {
         .demo-line { display:flex; align-items:center; gap:12px; font-size:14.5px; color:#e5e5ea; }
         .tick { width:20px; height:20px; border-radius:50%; background:#30d158; color:#000; display:grid; place-items:center; flex-shrink:0; }
         .pulse { width:20px; height:20px; display:grid; place-items:center; flex-shrink:0; }
-        .pulse::after { content:""; width:9px; height:9px; border-radius:50%; background:var(--blue); animation:ping 1.4s infinite; }
+        .pulse::after { content:""; width:9px; height:9px; border-radius:50%; background:var(--blue); animation:ping 3s infinite; }
         @keyframes ping { 0%{box-shadow:0 0 0 0 rgba(41,151,255,.7);} 100%{box-shadow:0 0 0 10px rgba(41,151,255,0);} }
-        .caret { width:2px; height:16px; background:var(--blue); margin-left:-6px; animation:blink 1s step-start infinite; }
+        .caret { width:2px; height:16px; background:var(--blue); margin-left:-6px; animation:blink 1.8s step-start infinite; }
         @keyframes blink { 50%{opacity:0;} }
         .demo-foot { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px; opacity:0; transition:opacity .5s; }
         .demo-foot.show { opacity:1; } .demo-foot svg { color:#30d158; }
 
-        /* MARQUEE */
-        .marquee { margin-top:80px; border-block:1px solid var(--line); padding:22px 0; overflow:hidden;
+        /* MARQUEE: bright, readable category names in brand colors */
+        .marquee { position:relative; z-index:1; /* above the crowd */
+          margin-top:80px; border-block:1px solid rgba(255,255,255,.22); padding:22px 0; overflow:hidden;
+          background:rgba(0,0,0,.45);
           mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent); }
         .track { display:flex; gap:56px; width:max-content; animation:slide 32s linear infinite; }
-        .track span { font-size:26px; font-weight:600; letter-spacing:-.02em; color:#5b5b62; white-space:nowrap; }
+        .track span { font-size:26px; font-weight:700; letter-spacing:-.02em; white-space:nowrap; color:#f5f5f7;
+          display:inline-flex; align-items:center; gap:56px; }
+        .track span::after { content:""; width:8px; height:8px; border-radius:50%; background:currentColor; opacity:.7; }
+        .track span:nth-child(3n+1) { color:#6cb8ff; text-shadow:0 0 18px rgba(41,151,255,.55); }
+        .track span:nth-child(3n+2) { color:#b99cff; text-shadow:0 0 18px rgba(142,92,247,.55); }
+        .track span:nth-child(3n)   { color:#ff8fb0; text-shadow:0 0 18px rgba(255,92,138,.55); }
         @keyframes slide { to { transform:translateX(-50%); } }
 
         /* SECTIONS */
@@ -306,6 +332,7 @@ function Home({ products = [] }) {
 
         @media (max-width:860px) {
           .hero { padding-top:64px; }
+          .hero-crowd { height:240px; }
           .hero-grid { grid-template-columns:1fr; gap:32px; text-align:center; }
           .hero-copy { order:1; }
           .hero-anim { order:2; max-width:360px; height:320px; }
@@ -317,9 +344,11 @@ function Home({ products = [] }) {
           .f1 h3 { font-size:32px; } .show { gap:44px; }
           .stat { border-left:0; border-top:1px solid var(--line); } .stat:first-child { border-top:0; }
           .section,#assistant { padding-top:84px; } .cta { margin-top:84px; padding:64px 22px; border-radius:28px; }
+          .track span { font-size:22px; gap:40px; } .track { gap:40px; }
         }
         @media (prefers-reduced-motion:reduce) {
-          .aurora span,.pulse::after,.caret,.track { animation:none; }
+          .aurora span,.pulse::after,.caret,.track,.hero-crowd { animation:none; }
+          .hero-crowd { display:none; }
           .rv { opacity:1; transform:none; transition:none; } .btn,.tile,.card { transition:none; }
         }
       `}</style>
@@ -327,6 +356,12 @@ function Home({ products = [] }) {
       {/* HERO */}
       <section className="hero">
         <div className="aurora"><span className="a" /><span className="b" /><span className="c" /></div>
+
+        {/* Walking crowd, anchored to the exact bottom edge of the hero (slowed down) */}
+        <div className="hero-crowd" aria-hidden="true">
+          <CrowdCanvas src={CROWD_SRC} rows={15} cols={7} speed={0.6} bounce={10} />
+        </div>
+
         <div className="wrap">
           <div className="hero-grid">
             {/* LEFT: Lottie animation */}
