@@ -59,7 +59,6 @@ INSTALLED_APPS = [
     'django_filters',
     'ai',
     # Keep your existing apps
-    "corsheaders",
 
 ]
 
