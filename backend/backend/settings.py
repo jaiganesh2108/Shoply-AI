@@ -77,6 +77,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
+    "https://shoply-ai-xi.vercel.app",
     "https://shoply-assendg8j-jai-ganesh-hs-projects.vercel.app",
 ]
 
