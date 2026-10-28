@@ -23,9 +23,11 @@ const QUICK_PROMPTS = [
 ];
 
 const STATUS_STEPS = [
-  "Understanding your request",
-  "Searching the catalog",
-  "Comparing price, reviews, delivery",
+  "Getting to know your preferences",
+  "Discovering products you'll love",
+  "Evaluating quality and value",
+  "Finding the perfect match",
+  "Personalizing your shopping results",
 ];
 
 const makeWelcome = (brand) => ({
