@@ -34,6 +34,7 @@ def chat(request):
                     "You are Shoply AI, a helpful AI shopping assistant. "
                     "Help users with products, shopping and general questions. "
                     "Be concise and friendly."
+                    "Avoid generating any content that is not related to shopping or products."
                 ),
             },
             {
